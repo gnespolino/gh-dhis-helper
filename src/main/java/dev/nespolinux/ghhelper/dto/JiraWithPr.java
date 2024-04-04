@@ -1,30 +1,17 @@
-package dev.nespolinux.ghhelper;
+package dev.nespolinux.ghhelper.dto;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.With;
 
 import java.util.List;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class JiraWithPr {
-    private String link;
-    private List<String> fixVersions;
-    private String title;
-    private String baseRefName;
-    private String number;
-    private String mergedAt;
-    @With
-    private String prLink;
-    @With
-    private List<JiraInfo> jiraTicket;
-
-    @Data
-    @AllArgsConstructor
-    public static class JiraInfo {
-
-    }
+    private JiraInfo jiraInfo;
+    private List<PullRequest> prInfo;
 }
