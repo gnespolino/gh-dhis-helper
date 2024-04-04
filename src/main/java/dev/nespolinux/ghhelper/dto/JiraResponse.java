@@ -1,4 +1,4 @@
-package dev.nespolinux.ghhelper;
+package dev.nespolinux.ghhelper.dto;
 
 import lombok.Data;
 

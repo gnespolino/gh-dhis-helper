@@ -20,7 +20,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class GhHelperApplication implements CommandLineRunner {
 
-    private final MyService myService;
+    private final GhHelperService ghHelperService;
 
     public static void main(String[] args) {
         SpringApplication.run(GhHelperApplication.class, args);
@@ -29,15 +29,15 @@ public class GhHelperApplication implements CommandLineRunner {
     @Override
     public void run(String... args) {
         if (args.length == 0) {
-            printResults(myService.getData());
+            printResults(ghHelperService.getData());
             return;
         }
         if (args.length == 1) {
-            printResults(myService.getData(args[0]));
+            printResults(ghHelperService.getData(args[0]));
             return;
         }
         if (args.length == 2) {
-            printResults(myService.getData(args[0], args[1]));
+            printResults(ghHelperService.getData(args[0], args[1]));
         }
     }
 

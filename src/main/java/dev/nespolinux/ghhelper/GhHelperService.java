@@ -1,6 +1,7 @@
 package dev.nespolinux.ghhelper;
 
 import dev.nespolinux.ghhelper.dto.JiraInfo;
+import dev.nespolinux.ghhelper.dto.JiraResponse;
 import dev.nespolinux.ghhelper.dto.JiraWithPr;
 import dev.nespolinux.ghhelper.dto.PullRequest;
 import dev.nespolinux.ghhelper.dto.PullRequestWithJiraInfo;
@@ -28,9 +29,9 @@ import static java.util.stream.Collectors.toList;
 
 @Service
 @RequiredArgsConstructor
-public class MyService {
+public class GhHelperService {
 
-    private final GHCommandRunner ghCommandRunner;
+    private final GhCommandRunner ghCommandRunner;
     private final RestTemplate restTemplate;
 
     @Value("${gh.user}")
@@ -51,11 +52,8 @@ public class MyService {
     public QueryData getData(String user, String baseDir) {
         List<PullRequestWithJiraInfo> prs = enrich(ghCommandRunner.getPrs(user, baseDir));
 
-        List<Pair<PullRequest, JiraInfo>> flattened = prs.stream()
+        List<JiraWithPr> jiraWithPr = prs.stream()
                 .flatMap(pr -> pr.getJiraInfos().stream().map(jiraInfo -> Pair.of(pr.getPullRequest(), jiraInfo)))
-                .toList();
-
-        List<JiraWithPr> jiraWithPr = flattened.stream()
                 .collect(Collectors.groupingBy(Pair::getRight, mapping(Pair::getLeft, toList())))
                 .entrySet().stream()
                 .map(entry -> JiraWithPr.builder()

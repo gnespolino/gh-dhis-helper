@@ -13,11 +13,11 @@ import java.util.List;
 import java.util.stream.Stream;
 
 @Service
-public class GHCommandRunner {
+public class GhCommandRunner {
 
     private final ObjectMapper objectMapper;
 
-    public GHCommandRunner() {
+    public GhCommandRunner() {
         this.objectMapper = new ObjectMapper();
     }
 

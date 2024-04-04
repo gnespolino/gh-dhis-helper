@@ -28,7 +28,6 @@ public class PullRequest {
     private String prLink;
 
     public static LocalDateTime toLocalDateTime(String mergedAt) {
-        // pattern for dates in the format: 2024-04-03T11:26:59Z
         String pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'";
         DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern(pattern, Locale.US);
         return LocalDateTime.parse(mergedAt, dateTimeFormatter);
