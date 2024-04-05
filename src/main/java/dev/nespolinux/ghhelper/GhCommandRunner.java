@@ -2,8 +2,7 @@ package dev.nespolinux.ghhelper;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.nespolinux.ghhelper.dto.PullRequest;
-import io.micrometer.common.util.StringUtils;
+import dev.nespolinux.ghhelper.dto.PullRequestListItem;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
 import org.springframework.stereotype.Service;
@@ -12,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES;
+
 @Service
 public class GhCommandRunner {
 
@@ -19,34 +20,51 @@ public class GhCommandRunner {
 
     public GhCommandRunner() {
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.configure(FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    public List<PullRequest> getPrs(String user, String baseDir) {
+
+    public List<PullRequestListItem> getPrList() {
         return Stream.concat(
-                        getPrs(user, baseDir, false).stream(),
-                        getPrs(user, baseDir, true).stream())
+                        getPrList(false).stream(),
+                        getPrList(true).stream())
                 .toList();
     }
 
     @SneakyThrows
-    private List<PullRequest> getPrs(String ghUser, String dhis2GitBase, boolean merged) {
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("sh", "-c", "cd " + dhis2GitBase + " && gh pr list " + (merged ? "--state merged" : "") + " --author " + ghUser + " --json number,title,baseRefName,createdAt,mergedAt");
-        Process process = processBuilder.start();
-        String processOutput = IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
-        String processError = IOUtils.toString(process.getErrorStream(), StandardCharsets.UTF_8);
-        if (StringUtils.isNotBlank(processError)) {
-            return List.of();
-        }
-        return readJson(processOutput).stream()
+    private List<PullRequestListItem> getPrList(boolean merged) {
+        List<PullRequestListItem> list = objectMapper.readValue(
+                executeCommand(getPrListCommand(merged)),
+                new TypeReference<>() {
+                });
+        return list.stream()
                 .map(pr -> pr.withMerged(merged))
                 .toList();
     }
 
+    private String getLoggedUser() {
+        return executeCommand("gh api user -q \".login\"").replace("\n", "");
+    }
+
+    public String getLoggedUserName() {
+        return executeCommand("gh api user -q \".name\"").replace("\n", "");
+    }
+
+    private String getPrListCommand(boolean merged) {
+        String ghUser = getLoggedUser();
+        return "gh pr list -R dhis2/dhis2-core " + (merged ? "--state merged " : "") + "--author " + ghUser + " --json id,number,title,baseRefName,createdAt,mergedAt,mergeable,statusCheckRollup";
+    }
+
     @SneakyThrows
-    private List<PullRequest> readJson(String processOutput) {
-        return objectMapper.readValue(processOutput, new TypeReference<>() {
-        });
+    private String executeCommand(String command) {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command("sh", "-c", command);
+        Process process = processBuilder.start();
+        //String processError = IOUtils.toString(process.getErrorStream(), StandardCharsets.UTF_8);
+        //if (StringUtils.isNotBlank(processError)) {
+        //    throw new RuntimeException(processError);
+        //}
+        return IOUtils.toString(process.getInputStream(), StandardCharsets.UTF_8);
     }
 
 }

@@ -13,5 +13,5 @@ import java.util.List;
 @Builder
 public class JiraWithPr {
     private JiraInfo jiraInfo;
-    private List<PullRequest> prInfo;
+    private List<PullRequestListItem> prInfo;
 }

@@ -3,7 +3,7 @@ package dev.nespolinux.ghhelper;
 import dev.nespolinux.ghhelper.dto.JiraInfo;
 import dev.nespolinux.ghhelper.dto.JiraResponse;
 import dev.nespolinux.ghhelper.dto.JiraWithPr;
-import dev.nespolinux.ghhelper.dto.PullRequest;
+import dev.nespolinux.ghhelper.dto.PullRequestListItem;
 import dev.nespolinux.ghhelper.dto.PullRequestWithJiraInfo;
 import dev.nespolinux.ghhelper.dto.QueryData;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static dev.nespolinux.ghhelper.dto.PullRequest.toLocalDateTime;
+import static dev.nespolinux.ghhelper.dto.PullRequestListItem.toLocalDateTime;
+import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 
@@ -34,79 +35,103 @@ public class GhHelperService {
     private final GhCommandRunner ghCommandRunner;
     private final RestTemplate restTemplate;
 
-    @Value("${gh.user}")
-    private String ghUser;
-    @Value("${dhis2.git.base}")
-    private String dhis2GitBase;
-    @Value("${days:30}")
+    @Value("${days:365}")
     private long days;
 
+    private static LocalDateTime getMaxDateInPrs(JiraWithPr jiraWithPr) {
+        return Stream.concat(
+                        jiraWithPr.getPrInfo().stream().map(PullRequestListItem::getParsedMergedAt),
+                        jiraWithPr.getPrInfo().stream().map(PullRequestListItem::getParsedCreatedAt))
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(LocalDateTime.MIN);
+    }
+
     public QueryData getData() {
-        return getData(ghUser, dhis2GitBase);
-    }
-
-    public QueryData getData(String user) {
-        return getData(user, dhis2GitBase);
-    }
-
-    public QueryData getData(String user, String baseDir) {
-        List<PullRequestWithJiraInfo> prs = enrich(ghCommandRunner.getPrs(user, baseDir));
+        List<PullRequestWithJiraInfo> prs = enrich(ghCommandRunner.getPrList());
 
         List<JiraWithPr> jiraWithPr = prs.stream()
-                .flatMap(pr -> pr.getJiraInfos().stream().map(jiraInfo -> Pair.of(pr.getPullRequest(), jiraInfo)))
+                .flatMap(pr -> pr.getJiraInfos().stream().map(jiraInfo -> Pair.of(pr.getPullRequestListItem(), jiraInfo)))
                 .collect(Collectors.groupingBy(Pair::getRight, mapping(Pair::getLeft, toList())))
                 .entrySet().stream()
                 .map(entry -> JiraWithPr.builder()
-                        .jiraInfo(entry.getKey())
+                        .jiraInfo(entry.getKey()
+                                .buildExpectedFixVersions(entry.getValue()))
                         .prInfo(entry.getValue())
                         .build())
                 .sorted(this::compareDates)
                 .toList();
 
+        String userName = ghCommandRunner.getLoggedUserName();
+
         return QueryData.builder()
-                .jiraWithPrs(jiraWithPr)
+                .jiraWithPrs(jiraWithPr.stream()
+                        .filter(jira -> isSuitable(jira, userName))
+                        .toList())
                 .build();
     }
 
+    private boolean isSuitable(JiraWithPr jira, String userName) {
+        return (isByUser(jira, userName) && isNotTestingOrDone(jira)) ||
+               hasUnmergedPrs(jira) ||
+               hasFailingChecks(jira) ||
+               doesntHaveFixVersions(jira) ||
+               (!jira.getJiraInfo().isFixVersionsMatch() &&
+                getMaxDateInPrs(jira)
+                        .isBefore(LocalDateTime.now().minusDays(60)));
+    }
+
+    private boolean isNotTestingOrDone(JiraWithPr jira) {
+        return !jira.getJiraInfo().getStatus().equalsIgnoreCase("testing") &&
+               !jira.getJiraInfo().getStatus().equalsIgnoreCase("done");
+    }
+
+    private boolean doesntHaveFixVersions(JiraWithPr jira) {
+        return jira.getJiraInfo().getFixVersions().isEmpty();
+    }
+
+    private boolean hasFailingChecks(JiraWithPr jira) {
+        return jira.getPrInfo().stream()
+                .anyMatch(pr -> !pr.getFailingStatusChecks().isEmpty());
+    }
+
+    private boolean hasUnmergedPrs(JiraWithPr jira) {
+        return jira.getPrInfo().stream().anyMatch(not(PullRequestListItem::isMerged));
+    }
+
+    private boolean isByUser(JiraWithPr jira, String userName) {
+        return jira.getJiraInfo().getAssignee().equals(userName);
+    }
+
     private int compareDates(JiraWithPr jiraWithPr1, JiraWithPr jiraWithPr2) {
-        LocalDateTime localDateTime1 = Stream.concat(
-                        jiraWithPr1.getPrInfo().stream().map(PullRequest::getParsedMergedAt),
-                        jiraWithPr1.getPrInfo().stream().map(PullRequest::getParsedCreatedAt))
-                .filter(Objects::nonNull)
-                .max(Comparator.naturalOrder())
-                .orElse(LocalDateTime.MIN);
-        LocalDateTime localDateTime2 = Stream.concat(
-                        jiraWithPr2.getPrInfo().stream().map(PullRequest::getParsedMergedAt),
-                        jiraWithPr2.getPrInfo().stream().map(PullRequest::getParsedCreatedAt))
-                .filter(Objects::nonNull)
-                .max(Comparator.naturalOrder())
-                .orElse(LocalDateTime.MIN);
+        LocalDateTime localDateTime1 = getMaxDateInPrs(jiraWithPr1);
+        LocalDateTime localDateTime2 = getMaxDateInPrs(jiraWithPr2);
 
         return localDateTime2.compareTo(localDateTime1);
     }
 
-    private List<PullRequestWithJiraInfo> enrich(List<PullRequest> prs) {
+    private List<PullRequestWithJiraInfo> enrich(List<PullRequestListItem> prs) {
         return prs.stream()
                 .filter(pr -> pr.getTitle().contains("DHIS2-"))
-                .filter(this::isRecentEnoughOrOpen)
+                .filter(pr -> isMoreRecentThan(pr, days))
                 .map(pr -> PullRequestWithJiraInfo.builder()
-                        .pullRequest(pr.withPrLink(getPrLink(pr))
+                        .pullRequestListItem(pr.withPrLink(getPrLink(pr))
                                 .withParsedDates(pr))
                         .jiraInfos(extractJiraTicket(pr))
                         .build())
                 .toList();
     }
 
-    private boolean isRecentEnoughOrOpen(PullRequest pr) {
+    private boolean isMoreRecentThan(PullRequestListItem pr, long days) {
         String consideredDate = pr.getMergedAt() == null ? pr.getCreatedAt() : pr.getMergedAt();
         return toLocalDateTime(consideredDate).isAfter(LocalDateTime.now().minusDays(days));
     }
 
-    private String getPrLink(PullRequest pr) {
+    private String getPrLink(PullRequestListItem pr) {
         return "https://github.com/dhis2/dhis2-core/pull/" + pr.getNumber();
     }
 
-    private List<JiraInfo> extractJiraTicket(PullRequest pr) {
+    private List<JiraInfo> extractJiraTicket(PullRequestListItem pr) {
         String title = pr.getTitle();
         List<Integer> dhis2Indexes = findDhis2(title);
         if (dhis2Indexes.isEmpty()) {
@@ -128,7 +153,13 @@ public class GhHelperService {
             List<String> fixVersions = getFixVersions(jiraResponse);
             String status = getStatus(jiraResponse);
             String assignee = getAssignee(jiraResponse);
-            ticketLinks.add(new JiraInfo(link, status, assignee, fixVersions));
+            ticketLinks.add(JiraInfo.builder()
+                    .link(link)
+                    .status(status)
+                    .assignee(assignee)
+                    .fixVersions(fixVersions)
+                    .expectedFixVersions(List.of())
+                    .build());
         }
         return ticketLinks;
     }

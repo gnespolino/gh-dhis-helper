@@ -14,7 +14,7 @@ import java.util.List;
 @Builder
 public class PullRequestWithJiraInfo {
     @With
-    private PullRequest pullRequest;
+    private PullRequestListItem pullRequestListItem;
     @With
     private List<JiraInfo> jiraInfos;
 
