@@ -7,6 +7,7 @@ import lombok.With;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -48,7 +49,7 @@ public class JiraInfo {
             normalized.remove("2.42");
             normalized.remove("2.41.1");
         }
-        return null;
+        return Collections.emptyList();
     }
 
     private String toExpectedFixVersion(PullRequestListItem pr) {
