@@ -18,6 +18,7 @@ import java.util.Optional;
 public class PullRequestListItem {
     private String id;
     private String title;
+    private String headRefName;
     private String baseRefName;
     private String number;
     private String createdAt;

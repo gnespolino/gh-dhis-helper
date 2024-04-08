@@ -197,6 +197,10 @@ public class GhHelperApplication implements CommandLineRunner {
 
         return statusMark
                 .concat("[")
+                .concat(ConsoleText.of(pr.getHeadRefName()).format(BRIGHT_WHITE))
+                .concat(" ")
+                .concat(ConsoleText.of("\u2192").format(AnsiFormat.BRIGHT_BLUE))
+                .concat(" ")
                 .concat(ConsoleText.of(pr.getBaseRefName()).format(CYAN))
                 .concat("] ")
                 .concat(title)

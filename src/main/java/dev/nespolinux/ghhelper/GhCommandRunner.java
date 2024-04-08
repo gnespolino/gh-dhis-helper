@@ -52,7 +52,7 @@ public class GhCommandRunner {
 
     private String getPrListCommand(boolean merged) {
         String ghUser = getLoggedUser();
-        return "gh pr list -R dhis2/dhis2-core " + (merged ? "--state merged " : "") + "--author " + ghUser + " --json id,number,title,baseRefName,createdAt,mergedAt,mergeable,statusCheckRollup";
+        return "gh pr list -R dhis2/dhis2-core " + (merged ? "--state merged " : "") + "--author " + ghUser + " --json id,number,title,headRefName,baseRefName,createdAt,mergedAt,mergeable,statusCheckRollup";
     }
 
     @SneakyThrows
